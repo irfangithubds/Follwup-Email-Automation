@@ -865,15 +865,16 @@ select:hover, select:focus {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  padding: 0.85rem 1.25rem 0.5rem;
-  gap: 0.5rem;
+  overflow-y: auto;
+  padding: 0.85rem 1.25rem 0.75rem;
+  gap: 0.75rem;
 }
 
 .editor-subfields {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  flex-shrink: 0;
 }
 
 .field-row {
@@ -881,7 +882,7 @@ select:hover, select:focus {
   align-items: center;
   gap: 0.6rem;
   background: rgba(22, 31, 54, 0.4);
-  padding: 0.3rem 0.6rem;
+  padding: 0.35rem 0.65rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
 }
@@ -904,31 +905,32 @@ select:hover, select:focus {
 }
 
 .textarea-container {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  background: rgba(14, 20, 34, 0.8);
+  background: rgba(14, 20, 34, 0.9);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 0.75rem;
-  transition: border-color 0.2s ease;
+  padding: 0.85rem;
+  min-height: 220px;
+  flex-shrink: 0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .textarea-container:focus-within {
   border-color: var(--border-active);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
 }
 
 .draft-textarea {
-  flex: 1;
+  width: 100%;
+  min-height: 160px;
   background: transparent;
   border: none;
-  color: var(--text-white);
-  font-size: 0.88rem;
-  line-height: 1.6;
+  color: #f8fafc;
+  font-size: 0.9rem;
+  line-height: 1.65;
   font-family: var(--font-body);
-  resize: none;
+  resize: vertical;
   outline: none;
 }
 
@@ -936,9 +938,10 @@ select:hover, select:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 0.4rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  font-size: 0.7rem;
+  padding-top: 0.5rem;
+  margin-top: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.72rem;
   color: var(--text-dim);
 }
 
@@ -946,9 +949,9 @@ select:hover, select:focus {
 .active-signature-box {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  margin-top: 0.4rem;
-  max-height: 240px;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  margin-top: 0.25rem;
 }
 
 .signature-box-header {
@@ -983,7 +986,7 @@ select:hover, select:focus {
   border-radius: var(--radius-md);
   padding: 0.85rem 1.15rem;
   overflow-y: auto;
-  max-height: 200px;
+  max-height: 175px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
