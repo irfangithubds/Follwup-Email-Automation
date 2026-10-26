@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ensaan FollowUp Copilot | AI Email Follow-up Automation</title>
+  <meta name="description" content="AI-powered Outlook email follow-up automation tool. Tracks sent emails, detects replies, drafts contextual follow-ups, and enables 1-by-1 review & approval.">
+  
+  <!-- Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app" class="app-container">
+    
+    <!-- Top Navigation Bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="brand">
+          <div class="brand-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5C2 7 4 5 6.5 5H18c2.2 0 4 1.8 4 4v8z"></path>
+              <polyline points="22,6 12,13 2,6"></polyline>
+            </svg>
+            <span class="status-beacon" title="Connected to Outlook Desktop"></span>
+          </div>
+          <div class="brand-text">
+            <h1>Ensaan FollowUp <span class="badge-copilot">Copilot</span></h1>
+            <span class="subtext">Outlook Sent Email Tracker & AI Follow-up Approval</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center KPIs / Quick Filters -->
+      <div class="topbar-center">
+        <div class="kpi-group">
+          <div class="kpi-pill active" id="kpi-awaiting" onclick="filterByStatus('needs_followup')">
+            <span class="kpi-dot amber"></span>
+            <span class="kpi-label">Awaiting Reply:</span>
+            <span class="kpi-value" id="count-awaiting">-</span>
+          </div>
+          <div class="kpi-pill" id="kpi-replied" onclick="filterByStatus('replied')">
+            <span class="kpi-dot blue"></span>
+            <span class="kpi-label">Replied:</span>
+            <span class="kpi-value" id="count-replied">-</span>
+          </div>
+          <div class="kpi-pill" id="kpi-sent" onclick="filterByStatus('approved_sent')">
+            <span class="kpi-dot green"></span>
+            <span class="kpi-label">Followed Up:</span>
+            <span class="kpi-value" id="count-followed">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Controls: Account & Date Range & Settings -->
+      <div class="topbar-right">
+        <!-- Account Switcher -->
+        <div class="control-group">
+          <label for="select-account" class="sr-only">Account</label>
+          <div class="select-wrapper">
+            <svg class="select-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <select id="select-account" onchange="loadEmails()">
+              <option value="all">All Accounts</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Date Range Filter -->
+        <div class="control-group">
+          <label for="select-days" class="sr-only">Timeframe</label>
+          <div class="select-wrapper">
+            <svg class="select-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <select id="select-days" onchange="loadEmails()">
+              <option value="14">Last 14 Days</option>
+              <option value="30">Last 30 Days</option>
+              <option value="60">Last 60 Days</option>
+              <option value="90" selected>Last 90 Days (3 Months)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Sync Button -->
+        <button id="btn-sync" class="btn-icon" onclick="loadEmails(true)" title="Scan Outlook Sent Items">
+          <svg class="spin-target" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        </button>
+
+        <!-- Settings Button -->
+        <button id="btn-settings" class="btn-icon" onclick="openSettingsModal()" title="AI & App Settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main App Split Layout -->
+    <main class="main-content">
+      
+      <!-- Left Panel: Follow-up Queue / Thread List -->
+      <aside class="queue-panel">
+        <div class="queue-header">
+          <div class="search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="input-search" placeholder="Search subject or recipient..." oninput="handleSearch(this.value)">
+          </div>
+
+          <!-- Status Tabs -->
+          <div class="tab-pills">
+            <button class="tab-btn active" data-status="needs_followup" onclick="setStatusTab('needs_followup', this)">
+              Needs Follow-up <span class="tab-count" id="tab-count-pending">0</span>
+            </button>
+            <button class="tab-btn" data-status="all" onclick="setStatusTab('all', this)">
+              All Sent
+            </button>
+            <button class="tab-btn" data-status="replied" onclick="setStatusTab('replied', this)">
+              Replied
+            </button>
+            <button class="tab-btn" data-status="approved_sent" onclick="setStatusTab('approved_sent', this)">
+              Sent
+            </button>
+          </div>
+        </div>
+
+        <!-- Thread List Cards Container -->
+        <div class="thread-list" id="thread-list">
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Scanning your Sent folder in Outlook...</p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Right Panel: One-by-One Review & Approval Workspace -->
+      <section class="review-workspace" id="review-workspace">
+        
+        <!-- Empty / No Selection State -->
+        <div class="empty-state" id="empty-state" style="display: none;">
+          <div class="empty-card">
+            <div class="empty-illustration">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+            </div>
+            <h2>All Caught Up!</h2>
+            <p>There are no sent emails awaiting follow-up in this timeframe. Great job staying on top of your communications!</p>
+            <button class="btn-secondary" onclick="loadEmails(true)">Re-scan Outlook Items</button>
+          </div>
+        </div>
+
+        <!-- Active Email Review Container -->
+        <div class="review-card" id="review-card">
+          
+          <!-- Review Navigation & Counter -->
+          <div class="review-stepper">
+            <div class="stepper-left">
+              <span class="step-indicator" id="step-indicator">Reviewing Email <strong id="current-step">1</strong> of <strong id="total-steps">0</strong></span>
+              <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progress-bar-fill" style="width: 10%;"></div>
+              </div>
+            </div>
+            <div class="stepper-right">
+              <button class="btn-nav" id="btn-prev" onclick="navigateQueue(-1)" title="Previous Email (Alt + Left)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg> Prev
+              </button>
+              <button class="btn-nav" id="btn-next" onclick="navigateQueue(1)" title="Next Email (Alt + Right)">
+                Next <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Thread Meta Header -->
+          <div class="thread-meta-box">
+            <div class="meta-row main">
+              <div class="recipient-badge-group">
+                <div class="avatar" id="active-avatar">M</div>
+                <div class="recipient-details">
+                  <div class="recipient-name-row">
+                    <h2 id="active-recipient-name">Recipient Name</h2>
+                    <span class="badge-waiting" id="active-waiting-badge">5 days without reply</span>
+                  </div>
+                  <div class="recipient-email" id="active-recipient-email">recipient@example.com</div>
+                </div>
+              </div>
+              <div class="meta-timestamps">
+                <span class="timestamp-label">Originally Sent:</span>
+                <span class="timestamp-val" id="active-sent-date">Oct 21, 2026 12:30 PM</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Main Review Split: Original Message (Collapsible) vs AI Draft Editor -->
+          <div class="review-grid">
+            
+            <!-- Left Sub-column: Original Sent Email View -->
+            <div class="original-email-col">
+              <div class="section-card-header">
+                <div class="header-title">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                  <span>Original Sent Email</span>
+                </div>
+                <div class="header-actions">
+                  <span class="account-tag" id="active-account-tag">Account</span>
+                </div>
+              </div>
+
+              <div class="original-subject-bar">
+                <span class="label">Subject:</span>
+                <span class="subject-val" id="active-original-subject">-</span>
+              </div>
+
+              <div class="original-body-scroll" id="active-original-body">
+                <!-- Original email body text injected here -->
+              </div>
+            </div>
+
+            <!-- Right Sub-column: AI Follow-up Studio -->
+            <div class="draft-studio-col">
+              <div class="section-card-header">
+                <div class="header-title">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
+                  <span>AI Follow-up Studio</span>
+                </div>
+                <div class="header-actions">
+                  <span class="ai-engine-badge" id="ai-engine-badge">Smart Engine</span>
+                </div>
+              </div>
+
+              <!-- Tone Selector Chips -->
+              <div class="tone-selector-bar">
+                <span class="tone-label">Tone:</span>
+                <div class="tone-chips" id="tone-chips">
+                  <button class="tone-chip active" data-tone="gentle" onclick="selectTone('gentle', this)">
+                    ⚡ Gentle & Warm
+                  </button>
+                  <button class="tone-chip" data-tone="professional" onclick="selectTone('professional', this)">
+                    🎯 Direct & Crisp
+                  </button>
+                  <button class="tone-chip" data-tone="value_add" onclick="selectTone('value_add', this)">
+                    🤝 Next Steps / Call
+                  </button>
+                  <button class="tone-chip" data-tone="urgent" onclick="selectTone('urgent', this)">
+                    ⏱️ Urgent / Milestone
+                  </button>
+                </div>
+              </div>
+
+              <!-- Prompt Refinement Bar -->
+              <div class="prompt-refine-bar">
+                <input type="text" id="input-custom-prompt" placeholder="Adjust with AI (e.g. 'Propose a 15-min call on Thursday at 2 PM')..." onkeydown="if(event.key==='Enter') regenerateDraft()">
+                <button class="btn-refine" id="btn-regenerate" onclick="regenerateDraft()">
+                  <svg class="spin-target" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                  <span>Regenerate</span>
+                </button>
+              </div>
+
+              <!-- Follow-up Draft Editor -->
+              <div class="draft-editor-wrapper">
+                <div class="editor-subfields">
+                  <div class="field-row">
+                    <label>Subject:</label>
+                    <input type="text" id="draft-subject" class="input-subject">
+                  </div>
+                  <div class="field-row">
+                    <label>CC:</label>
+                    <input type="text" id="draft-cc" class="input-cc" placeholder="Add CC emails (optional)">
+                  </div>
+                </div>
+
+                <div class="textarea-container">
+                  <textarea id="draft-body" class="draft-textarea" placeholder="Draft follow-up text will appear here..."></textarea>
+                  <div class="editor-footer">
+                    <span class="hint-text">💡 You can freely edit this draft directly before sending.</span>
+                    <span class="char-count" id="char-count">0 words</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- Bottom Action Toolbar (Sticky) -->
+          <div class="action-dock">
+            <div class="dock-left">
+              <button class="btn-action btn-dismiss" onclick="dismissCurrentEmail()" title="Mark as no follow-up needed">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                <span>Dismiss</span>
+              </button>
+
+              <div class="dropdown-container">
+                <button class="btn-action btn-snooze" onclick="toggleSnoozeMenu()" title="Snooze for later">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  <span>Snooze</span>
+                </button>
+                <div class="snooze-menu" id="snooze-menu">
+                  <button onclick="snoozeCurrentEmail(3)">Snooze 3 Days</button>
+                  <button onclick="snoozeCurrentEmail(7)">Snooze 1 Week</button>
+                  <button onclick="snoozeCurrentEmail(14)">Snooze 2 Weeks</button>
+                </div>
+              </div>
+
+              <button class="btn-action btn-skip" onclick="navigateQueue(1)" title="Skip to next email (Alt + N)">
+                <span>Skip For Now</span>
+              </button>
+            </div>
+
+            <div class="dock-right">
+              <!-- Save to Outlook Drafts -->
+              <button class="btn-action btn-draft" id="btn-save-draft" onclick="saveAsDraft()" title="Create in Outlook Drafts folder (Alt + S)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                <span>Save to Outlook Drafts</span>
+              </button>
+
+              <!-- Approve & Send Now (Primary) -->
+              <button class="btn-action btn-primary" id="btn-approve-send" onclick="approveAndSend()" title="Send email via Outlook (Ctrl + Enter)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                <span>Approve & Send Now</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Settings Modal -->
+    <div class="modal-backdrop" id="settings-modal" style="display: none;" onclick="if(event.target===this) closeSettingsModal()">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <div class="modal-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            <h2>FollowUp Copilot Settings</h2>
+          </div>
+          <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- AI Provider Selection -->
+          <div class="form-section">
+            <label class="section-label">AI Generation Engine</label>
+            <div class="provider-cards">
+              <label class="provider-card">
+                <input type="radio" name="ai_provider" value="smart_builtin" checked onchange="toggleProviderFields()">
+                <div class="card-inner">
+                  <div class="card-title">⚡ Smart Built-in Engine</div>
+                  <div class="card-desc">Zero configuration, runs instantly offline with contextual heuristics.</div>
+                </div>
+              </label>
+
+              <label class="provider-card">
+                <input type="radio" name="ai_provider" value="openai" onchange="toggleProviderFields()">
+                <div class="card-inner">
+                  <div class="card-title">OpenAI (ChatGPT / GPT-4o)</div>
+                  <div class="card-desc">High precision contextual reasoning via OpenAI API.</div>
+                </div>
+              </label>
+
+              <label class="provider-card">
+                <input type="radio" name="ai_provider" value="gemini" onchange="toggleProviderFields()">
+                <div class="card-inner">
+                  <div class="card-title">Google Gemini</div>
+                  <div class="card-desc">Fast and intelligent drafts via Gemini 1.5 / 2.0.</div>
+                </div>
+              </label>
+
+              <label class="provider-card">
+                <input type="radio" name="ai_provider" value="anthropic" onchange="toggleProviderFields()">
+                <div class="card-inner">
+                  <div class="card-title">Anthropic Claude</div>
+                  <div class="card-desc">Superior writing style via Claude 3.5 Sonnet / Haiku.</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- API Key fields (dynamically displayed) -->
+          <div class="form-group" id="group-openai" style="display: none;">
+            <label for="cfg-openai-key">OpenAI API Key</label>
+            <input type="password" id="cfg-openai-key" placeholder="sk-...">
+            <span class="field-hint">Stored safely in local database. Model: gpt-4o-mini</span>
+          </div>
+
+          <div class="form-group" id="group-gemini" style="display: none;">
+            <label for="cfg-gemini-key">Google Gemini API Key</label>
+            <input type="password" id="cfg-gemini-key" placeholder="AIzaSy...">
+            <span class="field-hint">Stored safely in local database. Model: gemini-1.5-flash</span>
+          </div>
+
+          <div class="form-group" id="group-anthropic" style="display: none;">
+            <label for="cfg-anthropic-key">Anthropic Claude API Key</label>
+            <input type="password" id="cfg-anthropic-key" placeholder="sk-ant-...">
+            <span class="field-hint">Stored safely in local database. Model: claude-3-5-haiku-20241022</span>
+          </div>
+
+          <!-- General Preferences -->
+          <div class="form-section">
+            <label class="section-label">Follow-up Automation Rules</label>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="cfg-sender-name">Your Sign-off Name</label>
+                <input type="text" id="cfg-sender-name" value="Irfan" placeholder="Your name">
+              </div>
+
+              <div class="form-group">
+                <label for="cfg-min-days">Minimum Days Waiting</label>
+                <input type="number" id="cfg-min-days" value="2" min="1" max="30">
+                <span class="field-hint">Flag email if no reply after X days</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+          <button class="btn-primary" onclick="saveSettings()">Save Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
