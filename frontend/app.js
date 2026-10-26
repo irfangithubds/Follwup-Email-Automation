@@ -217,6 +217,40 @@ async function selectEmail(index) {
   document.getElementById('active-original-subject').textContent = email.subject;
   document.getElementById('active-original-body').textContent = email.body || '(Email body is empty)';
 
+  // Render Attachments Bar
+  const attsBar = document.getElementById('active-attachments-bar');
+  const attsTags = document.getElementById('active-attachment-tags');
+  if (email.attachments && email.attachments.length > 0) {
+    attsBar.style.display = 'flex';
+    attsTags.innerHTML = email.attachments.map(att => {
+      const isExcel = att.toLowerCase().includes('.xls') || att.toLowerCase().includes('.csv');
+      return `<span class="attachment-pill ${isExcel ? 'excel' : ''}">📎 ${escapeHtml(att)}</span>`;
+    }).join('');
+  } else {
+    attsBar.style.display = 'none';
+  }
+
+  // Render Conversation Trail
+  const trailContainer = document.getElementById('active-trail-container');
+  const trailList = document.getElementById('active-trail-list');
+  const trailCount = document.getElementById('trail-count');
+  if (email.thread_trail && email.thread_trail.length > 0) {
+    trailContainer.style.display = 'flex';
+    trailCount.textContent = email.thread_trail.length;
+    trailList.innerHTML = email.thread_trail.map(t => `
+      <div class="trail-msg ${t.is_self ? 'self' : 'client'}">
+        <div class="trail-msg-top">
+          <span>${escapeHtml(t.sender)}</span>
+          <span class="trail-msg-date">${escapeHtml(t.date)}</span>
+        </div>
+        <div class="trail-msg-body">${escapeHtml(t.snippet)}</div>
+        ${t.attachments && t.attachments.length ? `<div class="trail-msg-atts">📎 Attached: ${escapeHtml(t.attachments.join(', '))}</div>` : ''}
+      </div>
+    `).join('');
+  } else {
+    trailContainer.style.display = 'none';
+  }
+
   // Reset Draft Studio To, CC & Subject
   document.getElementById('draft-to').value = email.to || '';
   document.getElementById('draft-cc').value = email.cc || '';
@@ -232,6 +266,14 @@ async function selectEmail(index) {
     // Generate AI draft automatically for this email
     await generateDraftForEmail(email, state.currentTone);
   }
+}
+
+function toggleTrail() {
+  const list = document.getElementById('active-trail-list');
+  const label = document.getElementById('trail-toggle-label');
+  const isHidden = list.style.display === 'none';
+  list.style.display = isHidden ? 'flex' : 'none';
+  label.innerHTML = isHidden ? 'Hide &uarr;' : 'Show &darr;';
 }
 
 // --- Draft Generation ---
@@ -250,7 +292,9 @@ async function generateDraftForEmail(email, tone, customPrompt = '') {
       recipient_name: email.recipient_name,
       days_waiting: email.days_waiting,
       tone: tone,
-      custom_instruction: customPrompt
+      custom_instruction: customPrompt,
+      attachments: email.attachments || [],
+      thread_trail: email.thread_trail || []
     };
 
     const res = await fetch('/api/generate-draft', {

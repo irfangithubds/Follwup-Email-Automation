@@ -17,6 +17,7 @@ from backend.outlook_service import (
     get_outlook_accounts,
     get_sent_emails,
     get_single_email,
+    get_email_thread_trail,
     send_followup_email,
     save_draft_in_outlook
 )
@@ -37,6 +38,8 @@ class GenerateDraftRequest(BaseModel):
     days_waiting: int
     tone: Optional[str] = "gentle"
     custom_instruction: Optional[str] = None
+    attachments: Optional[List[str]] = None
+    thread_trail: Optional[List[Dict[str, Any]]] = None
 
 class SendEmailRequest(BaseModel):
     entry_id: str
@@ -65,10 +68,10 @@ def list_accounts():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/signature")
-def get_signature():
+def get_signature(dark: bool = True):
     """Retrieve active HTML signature with working links and design."""
     try:
-        return {"html": get_active_signature_html(use_base64_img=True)}
+        return {"html": get_active_signature_html(use_base64_img=True, is_dark_preview=dark)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -119,13 +122,22 @@ def get_email_detail(entry_id: str):
 async def generate_draft(req: GenerateDraftRequest):
     """Generate an AI-powered follow-up email draft."""
     try:
+        thread_trail = req.thread_trail
+        if req.entry_id and not thread_trail:
+            try:
+                thread_trail = get_email_thread_trail(req.entry_id)
+            except Exception:
+                thread_trail = []
+
         result = await generate_llm_draft(
             original_subject=req.original_subject,
             original_body=req.original_body,
             recipient_name=req.recipient_name,
             days_waiting=req.days_waiting,
             tone=req.tone,
-            custom_instruction=req.custom_instruction
+            custom_instruction=req.custom_instruction,
+            attachments=req.attachments,
+            thread_trail=thread_trail
         )
         return result
     except Exception as e:

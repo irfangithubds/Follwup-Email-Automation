@@ -112,46 +112,53 @@ def get_sent_emails(
                     days_elapsed = (now_utc - sent_dt).total_seconds() / 86400.0
                     days_elapsed_int = int(days_elapsed)
                     
-                    # Conversation tracking: check if recipient replied
-                    conv = None
-                    try:
-                        conv = item.GetConversation()
-                    except Exception:
-                        pass
+                    db_entry = status_map.get(entry_id, {})
+                    db_status = db_entry.get("status")
                     
                     has_replied = False
                     last_reply_from = None
                     last_reply_time = None
                     
-                    if conv:
+                    # Performance optimization: only check conversation table if not already
+                    # actioned in DB and sent at least min_days_waiting ago
+                    if not db_status and days_elapsed_int >= min_days_waiting:
                         try:
-                            table = conv.GetTable()
-                            while not table.EndOfTable:
-                                row = table.GetNextRow()
-                                try:
-                                    eid = row["EntryID"]
-                                    if eid == entry_id:
+                            conv = item.GetConversation()
+                            if conv:
+                                table = conv.GetTable()
+                                while not table.EndOfTable:
+                                    row = table.GetNextRow()
+                                    try:
+                                        eid = row["EntryID"]
+                                        if eid == entry_id:
+                                            continue
+                                        conv_msg = mapi.GetItemFromID(eid)
+                                        recv_time = getattr(conv_msg, "ReceivedTime", None)
+                                        if recv_time and recv_time > sent_on:
+                                            sender_name = getattr(conv_msg, "SenderName", "")
+                                            sender_email = getattr(conv_msg, "SenderEmailAddress", "")
+                                            # Check if sender is not current user
+                                            if "mirfan" not in sender_email.lower() and "mirfan" not in sender_name.lower():
+                                                has_replied = True
+                                                last_reply_from = sender_name or sender_email
+                                                last_reply_time = recv_time.strftime("%Y-%m-%d %H:%M")
+                                                break
+                                    except Exception:
                                         continue
-                                    conv_msg = mapi.GetItemFromID(eid)
-                                    recv_time = getattr(conv_msg, "ReceivedTime", None)
-                                    if recv_time and recv_time > sent_on:
-                                        sender_name = getattr(conv_msg, "SenderName", "")
-                                        sender_email = getattr(conv_msg, "SenderEmailAddress", "")
-                                        # Check if sender is not current user
-                                        if "mirfan" not in sender_email.lower() and "mirfan" not in sender_name.lower():
-                                            has_replied = True
-                                            last_reply_from = sender_name or sender_email
-                                            last_reply_time = recv_time.strftime("%Y-%m-%d %H:%M")
-                                            break
-                                except Exception:
-                                    continue
                         except Exception:
                             pass
                     
+                    # Extract actual file attachments (excluding inline image assets)
+                    attachments = []
+                    try:
+                        for a in range(1, item.Attachments.Count + 1):
+                            fn = item.Attachments.Item(a).FileName
+                            if not re.match(r'^image\d+\.(png|jpg|jpeg|gif)$', fn, re.I):
+                                attachments.append(fn)
+                    except Exception:
+                        pass
+
                     # Determine status
-                    db_entry = status_map.get(entry_id, {})
-                    db_status = db_entry.get("status")
-                    
                     if db_status:
                         computed_status = db_status
                     elif has_replied:
@@ -192,12 +199,68 @@ def get_sent_emails(
                         "status": computed_status,
                         "snippet": snippet,
                         "body": clean_body[:5000], # Cap for payload size
+                        "attachments": attachments,
                         "saved_draft": db_entry.get("draft_body", "")
                     })
                 except Exception as ex:
                     continue
 
         return results
+    finally:
+        pythoncom.CoUninitialize()
+
+def get_email_thread_trail(entry_id: str) -> List[Dict[str, Any]]:
+    """Retrieve full chronological conversation trail for a specific email."""
+    pythoncom.CoInitialize()
+    try:
+        outlook = win32com.client.Dispatch("Outlook.Application")
+        mapi = outlook.GetNamespace("MAPI")
+        item = mapi.GetItemFromID(entry_id)
+        if not item:
+            return []
+        
+        trail = []
+        try:
+            conv = item.GetConversation()
+            if conv:
+                table = conv.GetTable()
+                while not table.EndOfTable:
+                    row = table.GetNextRow()
+                    try:
+                        c_eid = row["EntryID"]
+                        c_msg = mapi.GetItemFromID(c_eid)
+                        c_sender = getattr(c_msg, "SenderName", "") or getattr(c_msg, "SenderEmailAddress", "")
+                        c_date = getattr(c_msg, "SentOn", None)
+                        c_body = getattr(c_msg, "Body", "")
+                        c_atts = []
+                        try:
+                            for a in range(1, c_msg.Attachments.Count + 1):
+                                fn = c_msg.Attachments.Item(a).FileName
+                                if not re.match(r'^image\d+\.(png|jpg|jpeg|gif)$', fn, re.I):
+                                    c_atts.append(fn)
+                        except Exception:
+                            pass
+
+                        lines = [l.strip() for l in c_body.split('\n') if l.strip() and not l.strip().startswith('>') and not l.strip().startswith('From:') and not l.strip().startswith('Sent:')]
+                        meaningful = []
+                        for l in lines:
+                            if any(k in l.lower() for k in ["best regards", "regards,", "sincerely"]):
+                                break
+                            meaningful.append(l)
+                        snip = ' '.join(meaningful[:5])[:400]
+                        if snip:
+                            trail.append({
+                                "sender": c_sender,
+                                "date": c_date.strftime("%b %d, %Y") if hasattr(c_date, "strftime") else str(c_date)[:10],
+                                "snippet": snip,
+                                "attachments": c_atts,
+                                "is_self": "mirfan" in c_sender.lower()
+                            })
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        return trail
     finally:
         pythoncom.CoUninitialize()
 
@@ -218,6 +281,17 @@ def get_single_email(entry_id: str) -> Optional[Dict[str, Any]]:
         html_body = getattr(item, "HTMLBody", "")
         sent_on = item.SentOn
         
+        attachments = []
+        try:
+            for a in range(1, item.Attachments.Count + 1):
+                fn = item.Attachments.Item(a).FileName
+                if not re.match(r'^image\d+\.(png|jpg|jpeg|gif)$', fn, re.I):
+                    attachments.append(fn)
+        except Exception:
+            pass
+
+        thread_trail = get_email_thread_trail(entry_id)
+
         status_map = get_reviewed_status_map()
         db_entry = status_map.get(entry_id, {})
         
@@ -228,6 +302,8 @@ def get_single_email(entry_id: str) -> Optional[Dict[str, Any]]:
             "cc": cc_address,
             "body": body,
             "html_body": html_body,
+            "attachments": attachments,
+            "thread_trail": thread_trail,
             "sent_on": sent_on.strftime("%b %d, %Y %I:%M %p"),
             "status": db_entry.get("status", "needs_followup"),
             "saved_draft": db_entry.get("draft_body", ""),
