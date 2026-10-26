@@ -108,6 +108,8 @@ def format_attachment_reference(attachments: Optional[List[str]]) -> str:
     
     return f"the attached file ({first_file})"
 
+from backend.research_service import get_research_intelligence
+
 def generate_smart_builtin_draft(
     original_subject: str,
     original_body: str,
@@ -117,8 +119,10 @@ def generate_smart_builtin_draft(
     custom_instruction: Optional[str] = None,
     sender_name: str = "Irfan",
     attachments: Optional[List[str]] = None,
-    thread_trail: Optional[List[Dict[str, Any]]] = None
-) -> Dict[str, str]:
+    thread_trail: Optional[List[Dict[str, Any]]] = None,
+    to_address: Optional[str] = None,
+    include_intelligence: bool = True
+) -> Dict[str, Any]:
     first_name = clean_recipient_first_name(recipient_name)
     clean_sub = re.sub(r'^(re|fwd|fw):\s*', '', original_subject, flags=re.IGNORECASE).strip()
     file_ref = format_attachment_reference(attachments)
@@ -187,6 +191,22 @@ def generate_smart_builtin_draft(
             context_desc = f"my previous note regarding \"{clean_sub}\""
             action_desc = "Kindly let me know if you had an opportunity to review, or if there is anything we can assist with to move this forward."
 
+    # Retrieve live research intelligence (Prospect News + Solution Product Innovation)
+    intel = {}
+    hook_paragraph = ""
+    if include_intelligence:
+        try:
+            intel = get_research_intelligence(
+                subject=original_subject,
+                body=original_body,
+                to_address=to_address or "",
+                recipient_name=recipient_name,
+                thread_trail=thread_trail
+            )
+            hook_paragraph = intel.get("combined_hook", "")
+        except Exception as e:
+            print(f"Intelligence lookup notice: {e}")
+
     # Construct tone-specific email
     if tone == "professional":
         greeting = f"Dear {first_name},"
@@ -208,15 +228,22 @@ def generate_smart_builtin_draft(
         closing = "Whenever you have a moment, please let me know your thoughts."
 
     custom_add = f"\n\nNote: {custom_instruction.strip()}" if custom_instruction else ""
-    draft_body = f"{greeting}\n\n{opening}\n\n{action_desc}{custom_add}\n\n{closing}"
     
+    if hook_paragraph and include_intelligence:
+        draft_body = f"{greeting}\n\n{opening}\n\n{hook_paragraph}\n\n{action_desc}{custom_add}\n\n{closing}"
+    else:
+        draft_body = f"{greeting}\n\n{opening}\n\n{action_desc}{custom_add}\n\n{closing}"
+
     subject_prefix = "Follow-up: " if not original_subject.lower().startswith("re:") else ""
     draft_subject = f"{subject_prefix}{original_subject}"
 
     return {
         "subject": draft_subject,
         "body": draft_body,
-        "engine": "Contextual Smart Engine (Thread Trail & Attachments Aware)"
+        "engine": "Contextual AI & Market Intelligence Engine",
+        "company_news": intel.get("top_news", ""),
+        "solution_highlight": f"{intel.get('solution_name')}: {intel.get('solution_headline')}" if intel else "",
+        "research_intel": intel
     }
 
 async def generate_llm_draft(
@@ -227,8 +254,10 @@ async def generate_llm_draft(
     tone: str = "gentle",
     custom_instruction: Optional[str] = None,
     attachments: Optional[List[str]] = None,
-    thread_trail: Optional[List[Dict[str, Any]]] = None
-) -> Dict[str, str]:
+    thread_trail: Optional[List[Dict[str, Any]]] = None,
+    to_address: Optional[str] = None,
+    include_intelligence: bool = True
+) -> Dict[str, Any]:
     """Generates draft using OpenAI, Gemini, Anthropic, or falls back to Smart Engine."""
     provider = get_setting("ai_provider", "smart_builtin")
     sender_name = get_setting("sender_name", "Irfan")
@@ -254,6 +283,36 @@ async def generate_llm_draft(
     
     trail_str = "\n\n".join(trail_formatted_lines) if trail_formatted_lines else "No previous messages in trail."
 
+    # Retrieve live research intelligence
+    intel = {}
+    intel_prompt_block = ""
+    if include_intelligence:
+        try:
+            intel = get_research_intelligence(
+                subject=original_subject,
+                body=original_body,
+                to_address=to_address or "",
+                recipient_name=recipient_name,
+                thread_trail=thread_trail
+            )
+            intel_prompt_block = f"""
+LIVE RESEARCHED PROSPECT COMPANY NEWS & SOLUTION INNOVATIONS:
+- Prospect Company: {intel['company']}
+- Latest Company Milestone / News: {intel['top_news'] or 'Active expansion and Vision 2030 initiatives in Saudi Arabia'}
+- Relevant Solution Partner: {intel['solution_name']}
+- Latest Solution Innovation / Update: {intel['solution_headline']} — {intel['solution_summary']}
+
+CRITICAL INSTRUCTIONS FOR INCORPORATING RESEARCH:
+1. First, anchor the email in the previous email trail and explicitly reference any deliverables or files attached (e.g. {attachments_str}).
+2. Include a thoughtful, natural mention acknowledging their company's recent milestone/momentum ({intel['company']}), showing you are genuinely informed.
+3. Bridge this smoothly to how {intel['solution_name']} has recently evolved to help them address these exact enterprise/workforce needs.
+4. Keep the email concise, executive, and non-generic (3 to 4 short paragraphs total).
+5. Conclude with a clear, polite next step or offer for a 10-15 minute walk-through.
+6. Do NOT include any signoff or signature block.
+"""
+        except Exception as e:
+            print(f"Intel lookup error: {e}")
+
     system_prompt = f"""You are an elite executive assistant drafting context-aware follow-up email replies for {sender_name}.
 Tone requested: {tone.upper()} ({tone_desc})
 Target Recipient: {recipient_name}
@@ -269,6 +328,7 @@ CRITICAL CONTEXT & ATTACHMENT RULES:
 5. Keep it natural, polite, and concise (1 to 3 short paragraphs).
 6. Do NOT include any signoff or signature block (e.g. do NOT write 'Best Regards', 'Sincerely', or your name at the bottom). The corporate HTML signature is appended automatically.
 7. Return ONLY the email body text. Do not add quotes, introductory commentary, or subject line.
+{intel_prompt_block}
 """
 
     user_prompt = f"""Original Subject: {original_subject}
@@ -315,7 +375,10 @@ Please draft the follow-up email response:"""
                         return {
                             "subject": f"Follow-up: {original_subject}" if not original_subject.lower().startswith("re:") else original_subject,
                             "body": generated_text,
-                            "engine": f"OpenAI ({model})"
+                            "engine": f"OpenAI ({model}) + Market Intelligence",
+                            "company_news": intel.get("top_news", ""),
+                            "solution_highlight": f"{intel.get('solution_name')}: {intel.get('solution_headline')}" if intel else "",
+                            "research_intel": intel
                         }
 
         # 2. Google Gemini
@@ -340,7 +403,10 @@ Please draft the follow-up email response:"""
                         return {
                             "subject": f"Follow-up: {original_subject}" if not original_subject.lower().startswith("re:") else original_subject,
                             "body": generated_text,
-                            "engine": f"Gemini ({model})"
+                            "engine": f"Gemini ({model}) + Market Intelligence",
+                            "company_news": intel.get("top_news", ""),
+                            "solution_highlight": f"{intel.get('solution_name')}: {intel.get('solution_headline')}" if intel else "",
+                            "research_intel": intel
                         }
 
         # 3. Anthropic Claude
@@ -370,7 +436,10 @@ Please draft the follow-up email response:"""
                         return {
                             "subject": f"Follow-up: {original_subject}" if not original_subject.lower().startswith("re:") else original_subject,
                             "body": generated_text,
-                            "engine": f"Anthropic ({model})"
+                            "engine": f"Anthropic ({model}) + Market Intelligence",
+                            "company_news": intel.get("top_news", ""),
+                            "solution_highlight": f"{intel.get('solution_name')}: {intel.get('solution_headline')}" if intel else "",
+                            "research_intel": intel
                         }
 
     except Exception as e:
@@ -386,5 +455,7 @@ Please draft the follow-up email response:"""
         custom_instruction=custom_instruction,
         sender_name=sender_name,
         attachments=attachments,
-        thread_trail=thread_trail
+        thread_trail=thread_trail,
+        to_address=to_address,
+        include_intelligence=include_intelligence
     )

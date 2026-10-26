@@ -265,6 +265,38 @@
                 </div>
               </div>
 
+              <!-- Live Market & Solution Intelligence Card -->
+              <div class="intelligence-card" id="intelligence-card">
+                <div class="intel-header">
+                  <div class="intel-title">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                    <span>Market & Solution Intelligence</span>
+                  </div>
+                  <div class="intel-controls">
+                    <label class="intel-toggle-label" title="Automatically weave researched company news and solution updates into the email draft">
+                      <input type="checkbox" id="toggle-include-intel" checked onchange="handleIntelToggle(this.checked)">
+                      <span>Include in Draft</span>
+                    </label>
+                    <button class="btn-refresh-intel" id="btn-refresh-intel" onclick="refreshIntelligence()" title="Re-scrape fresh news and updates">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="intel-body" id="intel-body">
+                  <div class="intel-row">
+                    <span class="intel-badge company">🏢 Prospect</span>
+                    <strong class="intel-entity-name" id="intel-company-name">Detecting...</strong>
+                    <span class="intel-detail-text" id="intel-news-text">Scraping relevant company milestones & news...</span>
+                  </div>
+                  <div class="intel-row">
+                    <span class="intel-badge solution">🚀 Solution</span>
+                    <strong class="intel-entity-name" id="intel-solution-name">Cornerstone / entomo / Kredo</strong>
+                    <span class="intel-detail-text" id="intel-solution-text">Matching latest product updates & capabilities...</span>
+                  </div>
+                </div>
+              </div>
+
               <!-- Prompt Refinement Bar -->
               <div class="prompt-refine-bar">
                 <input type="text" id="input-custom-prompt" placeholder="Adjust with AI (e.g. 'Propose a 15-min call on Thursday at 2 PM')..." onkeydown="if(event.key==='Enter') regenerateDraft()">

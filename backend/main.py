@@ -40,6 +40,15 @@ class GenerateDraftRequest(BaseModel):
     custom_instruction: Optional[str] = None
     attachments: Optional[List[str]] = None
     thread_trail: Optional[List[Dict[str, Any]]] = None
+    to_address: Optional[str] = None
+    include_intelligence: Optional[bool] = True
+
+class ResearchIntelligenceRequest(BaseModel):
+    subject: str
+    body: str
+    to_address: Optional[str] = ""
+    recipient_name: Optional[str] = ""
+    thread_trail: Optional[List[Dict[str, Any]]] = None
 
 class SendEmailRequest(BaseModel):
     entry_id: str
@@ -128,6 +137,22 @@ def get_email_trail(entry_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/research-intelligence")
+def get_research_intel_endpoint(req: ResearchIntelligenceRequest):
+    """Retrieve researched company news and solution updates."""
+    try:
+        from backend.research_service import get_research_intelligence
+        intel = get_research_intelligence(
+            subject=req.subject,
+            body=req.body,
+            to_address=req.to_address or "",
+            recipient_name=req.recipient_name or "",
+            thread_trail=req.thread_trail
+        )
+        return intel
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/generate-draft")
 async def generate_draft(req: GenerateDraftRequest):
     """Generate an AI-powered follow-up email draft."""
@@ -140,11 +165,15 @@ async def generate_draft(req: GenerateDraftRequest):
                 thread_trail = []
 
         attachments = req.attachments or []
-        if req.entry_id and not attachments:
+        to_address = req.to_address
+        if req.entry_id and (not attachments or not to_address):
             try:
                 single = get_single_email(req.entry_id)
-                if single and single.get("attachments"):
-                    attachments = single["attachments"]
+                if single:
+                    if not attachments and single.get("attachments"):
+                        attachments = single["attachments"]
+                    if not to_address and single.get("to"):
+                        to_address = single["to"]
             except Exception:
                 pass
 
@@ -156,7 +185,9 @@ async def generate_draft(req: GenerateDraftRequest):
             tone=req.tone,
             custom_instruction=req.custom_instruction,
             attachments=attachments,
-            thread_trail=thread_trail
+            thread_trail=thread_trail,
+            to_address=to_address,
+            include_intelligence=req.include_intelligence if req.include_intelligence is not None else True
         )
         return result
     except Exception as e:

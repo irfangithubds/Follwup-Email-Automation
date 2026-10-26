@@ -960,6 +960,132 @@ select:hover, select:focus {
   font-weight: 600;
 }
 
+/* ==========================================================================
+   Live Market & Solution Intelligence Card
+   ========================================================================== */
+.intelligence-card {
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.9) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+  padding: 0.6rem 1.25rem;
+  font-size: 0.74rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.intel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.intel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  font-size: 0.72rem;
+  color: #38bdf8;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.intel-title svg {
+  color: #38bdf8;
+}
+
+.intel-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.intel-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  cursor: pointer;
+  user-select: none;
+}
+
+.intel-toggle-label input[type="checkbox"] {
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+
+.btn-refresh-intel {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-refresh-intel:hover {
+  background: rgba(99, 102, 241, 0.2);
+  color: #c7d2fe;
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.intel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.intel-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  line-height: 1.35;
+}
+
+.intel-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  letter-spacing: 0.03em;
+}
+
+.intel-badge.company {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.intel-badge.solution {
+  background: rgba(129, 140, 248, 0.15);
+  border: 1px solid rgba(129, 140, 248, 0.4);
+  color: #a5b4fc;
+}
+
+.intel-entity-name {
+  color: #f8fafc;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.intel-detail-text {
+  color: #94a3b8;
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Prompt Refinement Bar */
 .prompt-refine-bar {
   display: flex;

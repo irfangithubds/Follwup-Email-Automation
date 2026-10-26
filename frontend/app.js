@@ -276,7 +276,7 @@ async function selectEmail(index) {
   // Check if draft already exists in cache or saved draft in DB
   if (state.draftCache[email.entry_id]) {
     const cached = state.draftCache[email.entry_id];
-    setDraftContent(cached.subject, cached.body, cached.engine, cached.tone);
+    setDraftContent(cached.subject, cached.body, cached.engine, cached.tone, cached.research_intel, cached.company_news, cached.solution_highlight);
   } else if (email.saved_draft) {
     setDraftContent(`Follow-up: ${email.subject}`, email.saved_draft, 'Saved Draft', 'gentle');
   } else {
@@ -299,7 +299,7 @@ async function generateDraftForEmail(email, tone, customPrompt = '') {
   const regenBtn = document.getElementById('btn-regenerate');
   if (regenBtn) regenBtn.classList.add('spinning');
   
-  document.getElementById('ai-engine-badge').textContent = 'Drafting...';
+  document.getElementById('ai-engine-badge').textContent = 'Researching & Drafting...';
 
   try {
     const payload = {
@@ -311,7 +311,9 @@ async function generateDraftForEmail(email, tone, customPrompt = '') {
       tone: tone,
       custom_instruction: customPrompt,
       attachments: email.attachments || [],
-      thread_trail: email.thread_trail || []
+      thread_trail: email.thread_trail || [],
+      to_address: email.to || '',
+      include_intelligence: state.includeIntelligence !== false
     };
 
     const res = await fetch('/api/generate-draft', {
@@ -321,14 +323,25 @@ async function generateDraftForEmail(email, tone, customPrompt = '') {
     });
 
     const data = await res.json();
-    setDraftContent(data.subject, data.body, data.engine, tone);
+    setDraftContent(
+      data.subject, 
+      data.body, 
+      data.engine, 
+      tone, 
+      data.research_intel, 
+      data.company_news, 
+      data.solution_highlight
+    );
 
     // Cache draft
     state.draftCache[email.entry_id] = {
       subject: data.subject,
       body: data.body,
       engine: data.engine,
-      tone: tone
+      tone: tone,
+      research_intel: data.research_intel,
+      company_news: data.company_news,
+      solution_highlight: data.solution_highlight
     };
   } catch (err) {
     console.error('Draft generation failed:', err);
@@ -338,16 +351,74 @@ async function generateDraftForEmail(email, tone, customPrompt = '') {
   }
 }
 
-function setDraftContent(subject, body, engine, tone) {
+function setDraftContent(subject, body, engine, tone, intel = null, companyNews = '', solutionHighlight = '') {
   document.getElementById('draft-subject').value = subject;
   document.getElementById('draft-body').value = body;
   document.getElementById('ai-engine-badge').textContent = engine || 'Smart Engine';
   updateWordCount();
 
+  // Update Market & Solution Intelligence Card
+  renderIntelligenceCard(intel, companyNews, solutionHighlight);
+
   // Update tone chips
   document.querySelectorAll('.tone-chip').forEach(chip => {
     chip.classList.toggle('active', chip.dataset.tone === tone);
   });
+}
+
+function renderIntelligenceCard(intel, companyNews, solutionHighlight) {
+  const compName = document.getElementById('intel-company-name');
+  const newsText = document.getElementById('intel-news-text');
+  const solName = document.getElementById('intel-solution-name');
+  const solText = document.getElementById('intel-solution-text');
+
+  if (intel) {
+    if (compName) compName.textContent = intel.company || 'Prospect';
+    if (newsText) newsText.textContent = intel.top_news || 'Verified business expansion & infrastructure milestones in KSA';
+    if (solName) solName.textContent = intel.solution_name || 'Solution Provider';
+    if (solText) solText.textContent = intel.solution_headline ? `${intel.solution_headline} — ${intel.solution_summary || ''}` : 'Latest AI workforce updates and enterprise capabilities';
+  } else {
+    if (companyNews && newsText) newsText.textContent = companyNews;
+    if (solutionHighlight && solText) solText.textContent = solutionHighlight;
+  }
+}
+
+function handleIntelToggle(checked) {
+  state.includeIntelligence = checked;
+  regenerateDraft();
+}
+
+async function refreshIntelligence() {
+  const email = state.emails[state.currentIndex];
+  if (!email) return;
+
+  const refreshBtn = document.getElementById('btn-refresh-intel');
+  if (refreshBtn) refreshBtn.classList.add('spinning');
+
+  try {
+    const res = await fetch('/api/research-intelligence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject: email.subject,
+        body: email.body,
+        to_address: email.to || '',
+        recipient_name: email.recipient_name || '',
+        thread_trail: email.thread_trail || []
+      })
+    });
+    if (res.ok) {
+      const intel = await res.json();
+      renderIntelligenceCard(intel);
+      delete state.draftCache[email.entry_id];
+      await regenerateDraft();
+      showToast('Live company research & solution updates refreshed', 'info');
+    }
+  } catch (err) {
+    console.error('Failed to refresh intelligence:', err);
+  } finally {
+    if (refreshBtn) refreshBtn.classList.remove('spinning');
+  }
 }
 
 function selectTone(tone, btn) {
