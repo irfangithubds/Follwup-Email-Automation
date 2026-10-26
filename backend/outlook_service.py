@@ -119,30 +119,32 @@ def get_sent_emails(
                     last_reply_from = None
                     last_reply_time = None
                     
-                    # Performance optimization: only check conversation table if not already
-                    # actioned in DB and sent at least min_days_waiting ago
+                    # Performance optimization: read conversation table columns directly
                     if not db_status and days_elapsed_int >= min_days_waiting:
                         try:
                             conv = item.GetConversation()
                             if conv:
                                 table = conv.GetTable()
+                                try:
+                                    table.Columns.Add("SenderName")
+                                    table.Columns.Add("ReceivedTime")
+                                except Exception:
+                                    pass
                                 while not table.EndOfTable:
                                     row = table.GetNextRow()
                                     try:
                                         eid = row["EntryID"]
                                         if eid == entry_id:
                                             continue
-                                        conv_msg = mapi.GetItemFromID(eid)
-                                        recv_time = getattr(conv_msg, "ReceivedTime", None)
-                                        if recv_time and recv_time > sent_on:
-                                            sender_name = getattr(conv_msg, "SenderName", "")
-                                            sender_email = getattr(conv_msg, "SenderEmailAddress", "")
-                                            # Check if sender is not current user
-                                            if "mirfan" not in sender_email.lower() and "mirfan" not in sender_name.lower():
-                                                has_replied = True
-                                                last_reply_from = sender_name or sender_email
-                                                last_reply_time = recv_time.strftime("%Y-%m-%d %H:%M")
-                                                break
+                                        recv_time = row["ReceivedTime"]
+                                        sender_name = str(row["SenderName"] or "")
+                                        if recv_time and hasattr(recv_time, "year") and recv_time.year < 3000:
+                                            if normalize_trail_dt(recv_time) > normalize_trail_dt(sent_on):
+                                                if "mirfan" not in sender_name.lower():
+                                                    has_replied = True
+                                                    last_reply_from = sender_name
+                                                    last_reply_time = recv_time.strftime("%Y-%m-%d %H:%M") if hasattr(recv_time, "strftime") else str(recv_time)[:16]
+                                                    break
                                     except Exception:
                                         continue
                         except Exception:
@@ -209,6 +211,42 @@ def get_sent_emails(
     finally:
         pythoncom.CoUninitialize()
 
+def normalize_trail_dt(dt) -> datetime:
+    """Normalize datetime to timezone-aware UTC datetime for reliable sorting."""
+    if not dt or not hasattr(dt, "year"):
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if dt.year > 3000:
+        return datetime.max.replace(tzinfo=timezone.utc)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+def clean_trail_body_text(raw_body: str) -> str:
+    """Extract clean, meaningful conversational content from raw email body."""
+    if not raw_body:
+        return ""
+    lines = [l.strip() for l in raw_body.split('\n') if l.strip()]
+    meaningful = []
+    for l in lines:
+        # Skip quoted reply indicators and header lines
+        if l.startswith('>') or l.startswith('-----') or l.startswith('_____'):
+            continue
+        if any(l.lower().startswith(h) for h in ["from:", "sent:", "to:", "cc:", "subject:", "date:"]):
+            continue
+        # Skip standard system banners and disclaimers
+        if any(d in l.lower() for d in [
+            "caution: this email originated",
+            "the information in this email is confidential",
+            "you don't often get email from",
+            "##- please type your reply above this line"
+        ]):
+            continue
+        # Cut off at signoffs / signature blocks
+        if any(k in l.lower() for k in ["best regards", "kind regards", "regards,", "sincerely", "thanks & regards"]):
+            break
+        meaningful.append(l)
+    return ' '.join(meaningful[:10]).strip()
+
 def get_email_thread_trail(entry_id: str) -> List[Dict[str, Any]]:
     """Retrieve full chronological conversation trail for a specific email."""
     pythoncom.CoInitialize()
@@ -219,7 +257,7 @@ def get_email_thread_trail(entry_id: str) -> List[Dict[str, Any]]:
         if not item:
             return []
         
-        trail = []
+        raw_trail = []
         try:
             conv = item.GetConversation()
             if conv:
@@ -229,9 +267,17 @@ def get_email_thread_trail(entry_id: str) -> List[Dict[str, Any]]:
                     try:
                         c_eid = row["EntryID"]
                         c_msg = mapi.GetItemFromID(c_eid)
-                        c_sender = getattr(c_msg, "SenderName", "") or getattr(c_msg, "SenderEmailAddress", "")
                         c_date = getattr(c_msg, "SentOn", None)
+                        
+                        # Skip Outlook unsent drafts (Year 4501)
+                        if c_date and hasattr(c_date, "year") and c_date.year > 3000:
+                            continue
+                        
+                        c_sender = getattr(c_msg, "SenderName", "") or getattr(c_msg, "SenderEmailAddress", "")
+                        c_subject = getattr(c_msg, "Subject", "")
                         c_body = getattr(c_msg, "Body", "")
+                        
+                        # Extract non-image attachments
                         c_atts = []
                         try:
                             for a in range(1, c_msg.Attachments.Count + 1):
@@ -241,25 +287,40 @@ def get_email_thread_trail(entry_id: str) -> List[Dict[str, Any]]:
                         except Exception:
                             pass
 
-                        lines = [l.strip() for l in c_body.split('\n') if l.strip() and not l.strip().startswith('>') and not l.strip().startswith('From:') and not l.strip().startswith('Sent:')]
-                        meaningful = []
-                        for l in lines:
-                            if any(k in l.lower() for k in ["best regards", "regards,", "sincerely"]):
-                                break
-                            meaningful.append(l)
-                        snip = ' '.join(meaningful[:5])[:400]
-                        if snip:
-                            trail.append({
-                                "sender": c_sender,
-                                "date": c_date.strftime("%b %d, %Y") if hasattr(c_date, "strftime") else str(c_date)[:10],
-                                "snippet": snip,
-                                "attachments": c_atts,
-                                "is_self": "mirfan" in c_sender.lower()
-                            })
+                        clean_text = clean_trail_body_text(c_body)
+                        # Skip empty meeting responses or pure links without actual message
+                        if not clean_text and not c_atts:
+                            continue
+                        if "teams.microsoft.com" in clean_text and len(clean_text) < 120 and not c_atts:
+                            continue
+
+                        snip = clean_text[:280] + ("..." if len(clean_text) > 280 else "")
+
+                        raw_trail.append({
+                            "sender": c_sender,
+                            "date": c_date.strftime("%b %d, %Y %I:%M %p") if hasattr(c_date, "strftime") else str(c_date)[:16],
+                            "date_obj": normalize_trail_dt(c_date),
+                            "subject": c_subject,
+                            "snippet": snip,
+                            "body": clean_text[:1200],
+                            "attachments": c_atts,
+                            "is_self": "mirfan" in c_sender.lower()
+                        })
                     except Exception:
                         continue
         except Exception:
             pass
+
+        # Sort chronologically (oldest to newest)
+        raw_trail.sort(key=lambda x: x["date_obj"])
+
+        # Format output (remove date_obj which is not JSON serializable)
+        trail = []
+        for msg in raw_trail:
+            msg_copy = dict(msg)
+            del msg_copy["date_obj"]
+            trail.append(msg_copy)
+
         return trail
     finally:
         pythoncom.CoUninitialize()

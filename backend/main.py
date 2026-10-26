@@ -118,6 +118,16 @@ def get_email_detail(entry_id: str):
         raise HTTPException(status_code=404, detail="Email not found")
     return data
 
+@app.get("/api/email/{entry_id}/trail")
+def get_email_trail(entry_id: str):
+    """Retrieve sorted chronological conversation trail for an email."""
+    try:
+        trail = get_email_thread_trail(entry_id)
+        return {"trail": trail}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/generate-draft")
 async def generate_draft(req: GenerateDraftRequest):
     """Generate an AI-powered follow-up email draft."""
@@ -129,6 +139,15 @@ async def generate_draft(req: GenerateDraftRequest):
             except Exception:
                 thread_trail = []
 
+        attachments = req.attachments or []
+        if req.entry_id and not attachments:
+            try:
+                single = get_single_email(req.entry_id)
+                if single and single.get("attachments"):
+                    attachments = single["attachments"]
+            except Exception:
+                pass
+
         result = await generate_llm_draft(
             original_subject=req.original_subject,
             original_body=req.original_body,
@@ -136,7 +155,7 @@ async def generate_draft(req: GenerateDraftRequest):
             days_waiting=req.days_waiting,
             tone=req.tone,
             custom_instruction=req.custom_instruction,
-            attachments=req.attachments,
+            attachments=attachments,
             thread_trail=thread_trail
         )
         return result

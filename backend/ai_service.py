@@ -58,6 +58,56 @@ def format_attachment_reference(attachments: Optional[List[str]]) -> str:
     
     return f"the attached file ({first_file})"
 
+def clean_trail_text(text: str) -> str:
+    """Clean signatures, quoted replies, disclaimers, and whitespace."""
+    if not text:
+        return ""
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    meaningful = []
+    for l in lines:
+        if l.startswith(">") or l.startswith("-----") or l.startswith("_____"):
+            continue
+        if any(l.lower().startswith(h) for h in ["from:", "sent:", "to:", "cc:", "subject:", "date:"]):
+            continue
+        if any(d in l.lower() for d in [
+            "caution: this email originated", 
+            "the information in this email is confidential",
+            "you don't often get email from",
+            "##- please type your reply above this line"
+        ]):
+            continue
+        if any(s in l.lower() for s in ["best regards", "kind regards", "regards,", "sincerely", "thanks & regards"]):
+            break
+        meaningful.append(l)
+    return " ".join(meaningful[:6]).strip()
+
+def format_attachment_reference(attachments: Optional[List[str]]) -> str:
+    if not attachments:
+        return ""
+    valid_files = [f for f in attachments if not re.match(r'^image\d+\.(png|jpg|jpeg|gif)$', f, re.I)]
+    if not valid_files:
+        return ""
+    
+    first_file = valid_files[0]
+    first_lower = first_file.lower()
+    
+    if any(ext in first_lower for ext in ['.xlsx', '.xls', '.csv']):
+        if "eval" in first_lower:
+            return f"the completed technical evaluation sheet ({first_file})"
+        elif "pricing" in first_lower or "commercial" in first_lower or "boq" in first_lower:
+            return f"the commercial/pricing sheet ({first_file})"
+        return f"the attached Excel file ({first_file})"
+    elif ".pdf" in first_lower:
+        if any(k in first_lower for k in ["proposal", "quotation", "quote", "renewal"]):
+            return f"the submitted renewal proposal ({first_file})"
+        return f"the attached PDF document ({first_file})"
+    elif any(ext in first_lower for ext in ['.docx', '.doc']):
+        return f"the attached document ({first_file})"
+    elif any(ext in first_lower for ext in ['.pptx', '.ppt']):
+        return f"the updated presentation deck ({first_file})"
+    
+    return f"the attached file ({first_file})"
+
 def generate_smart_builtin_draft(
     original_subject: str,
     original_body: str,
@@ -70,77 +120,95 @@ def generate_smart_builtin_draft(
     thread_trail: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, str]:
     first_name = clean_recipient_first_name(recipient_name)
-    topic = extract_core_topic(original_subject, original_body)
+    clean_sub = re.sub(r'^(re|fwd|fw):\s*', '', original_subject, flags=re.IGNORECASE).strip()
+    file_ref = format_attachment_reference(attachments)
     
-    # Check attachments
-    att_ref = format_attachment_reference(attachments)
+    # Clean the last sent email body
+    clean_last_sent = clean_trail_text(original_body)
     
-    # Analyze body and thread trail for context
-    body_lower = original_body.lower()
-    trail_text = " ".join([t.get("snippet", "").lower() for t in (thread_trail or [])])
-    combined_context = f"{body_lower} {trail_text}"
+    # Extract client and partner messages from thread trail (up to last 3 conversations)
+    client_messages = []
+    recent_trail_msgs = []
+    if thread_trail:
+        for msg in thread_trail:
+            b = clean_trail_text(msg.get("body", "") or msg.get("snippet", ""))
+            if b and "teams.microsoft.com" not in b:
+                recent_trail_msgs.append(msg)
+                if not msg.get("is_self", False):
+                    client_messages.append({
+                        "sender": msg.get("sender", ""),
+                        "text": b,
+                        "date": msg.get("date", "")
+                    })
+    
+    last_client_msg = client_messages[-1] if client_messages else None
+    
+    # Combined context from subject, last sent email, and latest client request
+    all_context = (clean_last_sent + " " + clean_sub + " " + (last_client_msg["text"] if last_client_msg else "")).lower()
 
-    has_evaluation = "evaluation" in combined_context or "form" in combined_context
-    has_demo = "demo" in combined_context or "presentation" in combined_context
-    has_proposal = any(k in combined_context for k in ["proposal", "quote", "commercial", "rfq", "pricing"])
-    has_meeting = any(k in combined_context for k in ["meeting", "call", "schedule", "connect", "discussion"])
+    # Determine specific conversation theme and logical next step
+    if "evaluation" in all_context or (file_ref and "evaluation" in file_ref.lower()):
+        if file_ref:
+            context_desc = f"{file_ref} which I shared for your team's review regarding \"{clean_sub}\""
+            action_desc = "Could you please let me know if your team had an opportunity to review the filled evaluation sheet? We would be pleased to answer any questions or jump on a brief call if you need any walkthrough."
+        else:
+            context_desc = f"the technical evaluation form for \"{clean_sub}\""
+            action_desc = "Kindly let me know if you have received feedback from your technical team or if any additional clarifications are required from our side."
 
-    # Construct intelligent contextual context sentence
-    if att_ref:
-        context_str = f"regarding {att_ref} on \"{topic}\""
-    elif has_evaluation and has_demo:
-        context_str = f"regarding the evaluation form following our demo on \"{topic}\""
-    elif has_proposal:
-        context_str = f"regarding the proposal shared for \"{topic}\""
-    elif has_demo:
-        context_str = f"following up on our recent demo and discussion for \"{topic}\""
+    elif any(k in all_context for k in ["proposal", "renewal", "rfq", "quote", "commercial"]) or (file_ref and "proposal" in file_ref.lower()):
+        if file_ref:
+            context_desc = f"{file_ref} submitted for \"{clean_sub}\""
+            action_desc = "Could you please share an update on the review status or let us know if any further commercial or technical details are needed to proceed with the next steps?"
+        else:
+            context_desc = f"the proposal submitted for \"{clean_sub}\""
+            action_desc = "Kindly let me know if your team had a chance to review the proposal and if there are any questions we can assist with."
+
+    elif any(k in all_context for k in ["slide#", "slide #", "deck", "presentation", "pptx"]) or (file_ref and "deck" in file_ref):
+        if file_ref:
+            context_desc = f"{file_ref} with the updated revisions shared for \"{clean_sub}\""
+            action_desc = "Could you please confirm if the updated slides meet your expectations, or if you would like any further adjustments made?"
+        else:
+            context_desc = f"the updated presentation deck shared for \"{clean_sub}\""
+            action_desc = "Please let me know if you need any adjustments or if everything is aligned for our next discussion."
+
+    elif any(k in all_context for k in ["demo", "demonstration", "walkthrough"]):
+        context_desc = f"our recent demo and discussions regarding \"{clean_sub}\""
+        action_desc = "Could you please share your team's thoughts following the session, and let us know how you would like to proceed with the next milestones?"
+
+    elif any(k in all_context for k in ["reschedule", "rescheduling", "meeting", "call"]):
+        context_desc = f"the scheduling of our meeting for \"{clean_sub}\""
+        action_desc = "Could you please suggest a convenient day and time that works best for you and your team to reconnect?"
+
     else:
-        context_str = f"regarding \"{topic}\""
+        if file_ref:
+            context_desc = f"{file_ref} shared for \"{clean_sub}\""
+            action_desc = "Could you please let me know if your team had a chance to review, or if any additional details are needed from our side?"
+        else:
+            context_desc = f"my previous note regarding \"{clean_sub}\""
+            action_desc = "Kindly let me know if you had an opportunity to review, or if there is anything we can assist with to move this forward."
 
-    # Construct tone-based draft
+    # Construct tone-specific email
     if tone == "professional":
-        greeting = f"Hi {first_name},"
-        opening = f"I am following up on my previous email {context_str}."
-        if att_ref:
-            middle = f"Could you please let me know if your team had an opportunity to review {att_ref}? Please let me know if you need any adjustments or further clarifications from our side."
-        elif has_proposal or has_evaluation:
-            middle = "Could you please share a quick update on your team's feedback so we can plan the next steps accordingly?"
-        else:
-            middle = "Kindly let me know if you had an opportunity to review, or if any additional information is required from our side to proceed."
-        closing = "Looking forward to your guidance."
-
-    elif tone == "value_add":
         greeting = f"Dear {first_name},"
-        opening = f"Hope you're having a productive week.\n\nI wanted to circle back on my last note {context_str}."
-        if att_ref:
-            middle = f"I would be glad to jump on a quick 10-15 minute sync if that helps answer any questions regarding {att_ref} or walk through any specific details together."
-        else:
-            middle = "I would be glad to jump on a quick 10-15 minute sync if that helps clarify any open points or address any specific requirements."
-        closing = "Please let me know what day and time might work best for you."
-
-    elif tone == "urgent":
+        opening = f"I am writing to follow up on {context_desc}."
+        closing = "Looking forward to your guidance."
+    elif tone == "value_add":
         greeting = f"Hi {first_name},"
-        opening = f"Hope all is well.\n\nI am writing to check in on the below thread {context_str}."
-        if att_ref:
-            middle = f"As we are organizing upcoming project deliverables and timelines, your feedback on {att_ref} would be greatly appreciated to keep everything on track."
-        else:
-            middle = "As we are organizing upcoming project deliverables and milestones, your input on this would be greatly appreciated to keep everything on track."
+        opening = f"Hope you are having a productive week.\n\nI am circling back on {context_desc}."
+        action_desc += "\n\nI would be more than happy to arrange a brief 10-15 minute sync if you or the team would like to review this together."
+        closing = "Please let me know what day and time suits you best."
+    elif tone == "urgent":
+        greeting = f"Dear {first_name},"
+        opening = f"Hope all is well with you.\n\nI am writing to check in on {context_desc}."
+        action_desc = f"As we are finalizing our project schedules and upcoming milestones, your guidance on this would be greatly appreciated to keep everything on track."
         closing = "Could you please provide a brief update at your earliest convenience?"
-
     else: # gentle / default
         greeting = f"Hi {first_name},"
-        opening = f"Hope you are doing well.\n\nJust wanted to gently follow up on my previous email {context_str}."
-        if att_ref:
-            middle = f"I understand you have a busy schedule. Just checking if you had a chance to review {att_ref}, or if you require any additional information from our side."
-        else:
-            middle = "Whenever you have a moment, please let me know your thoughts or if there is anything else I can assist with."
-        closing = "Have a great day ahead!"
+        opening = f"Hope you are doing well.\n\nJust wanted to gently check in on {context_desc}."
+        closing = "Whenever you have a moment, please let me know your thoughts."
 
-    custom_add = ""
-    if custom_instruction:
-        custom_add = f"\n\nNote: {custom_instruction.strip()}"
-
-    draft_body = f"{greeting}\n\n{opening}\n\n{middle}{custom_add}\n\n{closing}"
+    custom_add = f"\n\nNote: {custom_instruction.strip()}" if custom_instruction else ""
+    draft_body = f"{greeting}\n\n{opening}\n\n{action_desc}{custom_add}\n\n{closing}"
     
     subject_prefix = "Follow-up: " if not original_subject.lower().startswith("re:") else ""
     draft_subject = f"{subject_prefix}{original_subject}"
@@ -148,7 +216,7 @@ def generate_smart_builtin_draft(
     return {
         "subject": draft_subject,
         "body": draft_body,
-        "engine": "Built-in Smart Template (Context & Attachment Aware)"
+        "engine": "Contextual Smart Engine (Thread Trail & Attachments Aware)"
     }
 
 async def generate_llm_draft(
@@ -172,13 +240,14 @@ async def generate_llm_draft(
     valid_attachments = [f for f in (attachments or []) if not re.match(r'^image\d+\.(png|jpg|jpeg|gif)$', f, re.I)]
     attachments_str = ", ".join(valid_attachments) if valid_attachments else "None (No non-image files attached)"
 
-    # Format chronological conversation trail
+    # Format chronological conversation trail (focus on last 3-4 messages)
     trail_formatted_lines = []
     if thread_trail:
-        for i, msg in enumerate(thread_trail, 1):
+        recent_subset = thread_trail[-4:] if len(thread_trail) > 4 else thread_trail
+        for i, msg in enumerate(recent_subset, 1):
             sender = msg.get("sender", "Unknown")
             date_str = msg.get("date", "")
-            snip = msg.get("snippet", "")
+            snip = msg.get("body", "") or msg.get("snippet", "")
             atts = msg.get("attachments", [])
             att_info = f" [Attached: {', '.join(atts)}]" if atts else ""
             trail_formatted_lines.append(f"{i}. [{date_str}] From: {sender}{att_info}\n   Message excerpt: {snip}")
@@ -192,8 +261,10 @@ Days elapsed since last email: {days_waiting} days.
 
 CRITICAL CONTEXT & ATTACHMENT RULES:
 1. Examine the email subject, latest message, conversation trail, and attached files.
-2. If files were attached (e.g., Excel evaluation sheets like .xlsx, proposal PDFs, price quotes, slide decks), YOU MUST EXPLICITLY REFER TO THEM BY NAME OR PURPOSE in your follow-up note (e.g., "Following up on the Excel evaluation sheet I shared...", "Checking in to see if you had a chance to review the attached evaluation form...").
-3. Connect the email organically to what was discussed in the thread (e.g. following up after a demo, providing the requested evaluation form, checking on next steps).
+2. Focus especially on the LAST 3 CONVERSATIONS in the email trail:
+   - What did the recipient ask for or discuss previously (e.g. evaluation form, demo feedback, quotation, meeting schedule)?
+   - What did {sender_name} share or promise in the very last email (e.g. sharing the filled technical evaluation sheet, submitting a proposal, sending revised slides)?
+3. If files were attached (e.g., Excel evaluation sheets like .xlsx, proposal PDFs, price quotes, slide decks), YOU MUST EXPLICITLY REFER TO THEM BY NAME OR PURPOSE in your follow-up note (e.g., "Following up on the completed technical evaluation form (LMS Features - Cornerstone - Albawani Evaluation.xlsx) I shared...").
 4. Write in the first person as {sender_name}.
 5. Keep it natural, polite, and concise (1 to 3 short paragraphs).
 6. Do NOT include any signoff or signature block (e.g. do NOT write 'Best Regards', 'Sincerely', or your name at the bottom). The corporate HTML signature is appended automatically.
@@ -209,7 +280,7 @@ Latest Sent Email Body:
 {clean_body_excerpt}
 ---
 
-Full Conversation Trail History (Chronological):
+Recent Conversation Trail (Last 3-4 Chronological Interactions):
 ---
 {trail_str}
 ---

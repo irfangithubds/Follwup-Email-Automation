@@ -230,6 +230,20 @@ async function selectEmail(index) {
     attsBar.style.display = 'none';
   }
 
+  // Fetch conversation trail for this email if not yet loaded
+  if (!email.thread_trail) {
+    try {
+      const trailRes = await fetch(`/api/email/${encodeURIComponent(email.entry_id)}/trail`);
+      if (trailRes.ok) {
+        const trailData = await trailRes.json();
+        email.thread_trail = trailData.trail || [];
+      }
+    } catch (e) {
+      console.warn('Could not load thread trail:', e);
+      email.thread_trail = [];
+    }
+  }
+
   // Render Conversation Trail
   const trailContainer = document.getElementById('active-trail-container');
   const trailList = document.getElementById('active-trail-list');
@@ -240,13 +254,16 @@ async function selectEmail(index) {
     trailList.innerHTML = email.thread_trail.map(t => `
       <div class="trail-msg ${t.is_self ? 'self' : 'client'}">
         <div class="trail-msg-top">
-          <span>${escapeHtml(t.sender)}</span>
+          <span>${escapeHtml(t.sender)} ${t.is_self ? '<span style="font-size:0.65rem; color:#818cf8; margin-left:4px;">(You)</span>' : '<span style="font-size:0.65rem; color:#34d399; margin-left:4px;">(Client)</span>'}</span>
           <span class="trail-msg-date">${escapeHtml(t.date)}</span>
         </div>
-        <div class="trail-msg-body">${escapeHtml(t.snippet)}</div>
-        ${t.attachments && t.attachments.length ? `<div class="trail-msg-atts">📎 Attached: ${escapeHtml(t.attachments.join(', '))}</div>` : ''}
+        <div class="trail-msg-body">${escapeHtml(t.body || t.snippet)}</div>
+        ${t.attachments && t.attachments.length ? `<div class="trail-msg-atts" style="margin-top:4px;">📎 Attached: <span style="color:#6ee7b7; font-weight:500;">${escapeHtml(t.attachments.join(', '))}</span></div>` : ''}
       </div>
     `).join('');
+    // Ensure trail is visible by default
+    trailList.style.display = 'flex';
+    document.getElementById('trail-toggle-label').innerHTML = 'Hide &uarr;';
   } else {
     trailContainer.style.display = 'none';
   }
