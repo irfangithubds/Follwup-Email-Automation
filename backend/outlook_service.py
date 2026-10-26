@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 import re
 import html
 from backend.database import get_reviewed_status_map, update_email_status
+from backend.signature_service import get_active_signature_html
 
 def clean_html_to_text(html_content: str) -> str:
     """Utility to extract clean readable text from HTML email bodies."""
@@ -262,12 +263,14 @@ def send_followup_email(
         if cc:
             reply.CC = cc
             
-        # Format HTML body with clean styling above quoted history
+        # Format HTML body with clean styling and active signature above quoted history
         formatted_content = draft_body.replace("\n", "<br>")
+        signature_html = get_active_signature_html(use_base64_img=True)
         styled_html = f"""
         <div style="font-family: Calibri, 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1f2937; line-height: 1.5;">
             {formatted_content}
         </div>
+        {signature_html}
         <br>
         """
         reply.HTMLBody = styled_html + reply.HTMLBody
@@ -321,10 +324,12 @@ def save_draft_in_outlook(
             reply.CC = cc
             
         formatted_content = draft_body.replace("\n", "<br>")
+        signature_html = get_active_signature_html(use_base64_img=True)
         styled_html = f"""
         <div style="font-family: Calibri, 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1f2937; line-height: 1.5;">
             {formatted_content}
         </div>
+        {signature_html}
         <br>
         """
         reply.HTMLBody = styled_html + reply.HTMLBody

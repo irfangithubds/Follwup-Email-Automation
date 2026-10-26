@@ -21,12 +21,26 @@ const state = {
 document.addEventListener('DOMContentLoaded', async () => {
   setupKeyboardShortcuts();
   setupTextareaWordCount();
+  await loadSignature();
   await loadAccounts();
   await loadSettings();
   await loadEmails();
 });
 
 // --- API Calls ---
+
+async function loadSignature() {
+  try {
+    const res = await fetch('/api/signature');
+    const data = await res.json();
+    const container = document.getElementById('active-signature-render');
+    if (container && data.html) {
+      container.innerHTML = data.html;
+    }
+  } catch (err) {
+    console.error('Failed to load active signature:', err);
+  }
+}
 
 async function loadAccounts() {
   try {

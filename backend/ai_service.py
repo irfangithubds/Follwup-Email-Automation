@@ -95,7 +95,7 @@ def generate_smart_builtin_draft(
     if custom_instruction:
         custom_add = f"\n\nNote: {custom_instruction.strip()}"
 
-    draft_body = f"{greeting}\n\n{opening}\n\n{middle}{custom_add}\n\n{closing}\n\nBest regards,\n{sender_name}"
+    draft_body = f"{greeting}\n\n{opening}\n\n{middle}{custom_add}\n\n{closing}"
     
     subject_prefix = "Follow-up: " if not original_subject.lower().startswith("re:") else ""
     draft_subject = f"{subject_prefix}{original_subject}"
@@ -132,7 +132,7 @@ Guidelines:
 2. Be natural, contextual, and polite. Reference key context from the original email organically.
 3. Keep it crisp, readable (1 to 3 short paragraphs maximum).
 4. Do NOT include placeholder tokens like [Your Name] or [Recipient Name]. Use exact names provided.
-5. End with the signoff: 'Best regards,\n{sender_name}'.
+5. Do NOT include any signoff or signature block (e.g., do not add 'Best Regards' or your name at the end), because an active HTML corporate signature is appended automatically.
 6. Respond with ONLY the email body text. Do not add quotes, introductory commentary, or subject line in the body.
 """
 

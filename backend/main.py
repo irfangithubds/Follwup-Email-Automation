@@ -21,6 +21,7 @@ from backend.outlook_service import (
     save_draft_in_outlook
 )
 from backend.ai_service import generate_llm_draft
+from backend.signature_service import get_active_signature_html
 
 # Initialize DB on start
 init_db()
@@ -59,6 +60,14 @@ def list_accounts():
     """List available Outlook mail accounts."""
     try:
         return {"accounts": get_outlook_accounts()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/signature")
+def get_signature():
+    """Retrieve active HTML signature with working links and design."""
+    try:
+        return {"html": get_active_signature_html(use_base64_img=True)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

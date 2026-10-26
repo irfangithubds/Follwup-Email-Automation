@@ -942,6 +942,68 @@ select:hover, select:focus {
   color: var(--text-dim);
 }
 
+/* Active Signature Box */
+.active-signature-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  max-height: 240px;
+}
+
+.signature-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.2rem;
+}
+
+.sig-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #a5b4fc;
+}
+
+.sig-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.12rem 0.5rem;
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.signature-render-area {
+  background: #ffffff;
+  color: #000000;
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1.15rem;
+  overflow-y: auto;
+  max-height: 200px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.signature-render-area a {
+  color: #0563C1 !important;
+  text-decoration: underline !important;
+  transition: opacity 0.15s ease;
+}
+
+.signature-render-area a:hover {
+  opacity: 0.8;
+}
+
+.active-email-signature {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  border-top: none !important;
+}
+
 /* Action Dock (Bottom Toolbar) */
 .action-dock {
   display: flex;
