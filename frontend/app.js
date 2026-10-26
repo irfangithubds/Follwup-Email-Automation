@@ -217,7 +217,8 @@ async function selectEmail(index) {
   document.getElementById('active-original-subject').textContent = email.subject;
   document.getElementById('active-original-body').textContent = email.body || '(Email body is empty)';
 
-  // Reset Draft Studio CC & Subject
+  // Reset Draft Studio To, CC & Subject
+  document.getElementById('draft-to').value = email.to || '';
   document.getElementById('draft-cc').value = email.cc || '';
   document.getElementById('input-custom-prompt').value = '';
 
@@ -313,6 +314,7 @@ async function approveAndSend() {
   const email = state.emails[state.currentIndex];
   if (!email) return;
 
+  const draftTo = document.getElementById('draft-to').value.trim();
   const draftBody = document.getElementById('draft-body').value.trim();
   const draftSubject = document.getElementById('draft-subject').value.trim();
   const cc = document.getElementById('draft-cc').value.trim();
@@ -334,13 +336,14 @@ async function approveAndSend() {
         entry_id: email.entry_id,
         draft_body: draftBody,
         draft_subject: draftSubject,
+        to: draftTo,
         cc: cc
       })
     });
 
     const result = await res.json();
     if (result.success) {
-      showToast(`Follow-up sent successfully to ${email.recipient_name}!`, 'success');
+      showToast(`Follow-up sent successfully to ${result.to || email.recipient_name}!`, 'success');
       // Advance to next email and refresh counts
       advanceAfterAction(email.entry_id);
     } else {
@@ -361,6 +364,7 @@ async function saveAsDraft() {
   const email = state.emails[state.currentIndex];
   if (!email) return;
 
+  const draftTo = document.getElementById('draft-to').value.trim();
   const draftBody = document.getElementById('draft-body').value.trim();
   const draftSubject = document.getElementById('draft-subject').value.trim();
   const cc = document.getElementById('draft-cc').value.trim();
@@ -373,6 +377,7 @@ async function saveAsDraft() {
         entry_id: email.entry_id,
         draft_body: draftBody,
         draft_subject: draftSubject,
+        to: draftTo,
         cc: cc
       })
     });

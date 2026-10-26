@@ -239,15 +239,24 @@ def get_single_email(entry_id: str) -> Optional[Dict[str, Any]]:
     finally:
         pythoncom.CoUninitialize()
 
+def clean_recipient_list(addr_str: str, exclude_patterns: list) -> str:
+    """Filter out user's own email from recipient lists."""
+    if not addr_str:
+        return ""
+    parts = [p.strip() for p in addr_str.split(";") if p.strip()]
+    cleaned = [p for p in parts if not any(x.lower() in p.lower() for x in exclude_patterns)]
+    return "; ".join(cleaned)
+
 def send_followup_email(
     entry_id: str,
     draft_body: str,
     draft_subject: Optional[str] = None,
+    to: Optional[str] = None,
     cc: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Approve and send follow-up reply email via Outlook.
-    Automatically threads under the original message.
+    Explicitly addresses the client recipient (original_item.To) instead of self.
     """
     pythoncom.CoInitialize()
     try:
@@ -255,13 +264,25 @@ def send_followup_email(
         mapi = outlook.GetNamespace("MAPI")
         original_item = mapi.GetItemFromID(entry_id)
         
-        # Create reply preserving thread
+        # Create reply item
         reply = original_item.ReplyAll() if original_item.CC else original_item.Reply()
         
+        # CRITICAL FIX: When replying to a Sent Items message, Outlook sets reply.To to the
+        # sender (the current user). We MUST explicitly set reply.To to the client recipient!
+        client_to = to.strip() if to and to.strip() else original_item.To
+        
+        # Clean out current user's email if accidentally present in To or CC
+        user_patterns = ["mirfan@ensaantech.com", "mirfan@squareonemea.com"]
+        cleaned_to = clean_recipient_list(client_to, user_patterns) or client_to
+        reply.To = cleaned_to
+        
+        if cc is not None and cc.strip():
+            reply.CC = clean_recipient_list(cc.strip(), user_patterns)
+        elif original_item.CC:
+            reply.CC = clean_recipient_list(original_item.CC, user_patterns)
+            
         if draft_subject:
             reply.Subject = draft_subject
-        if cc:
-            reply.CC = cc
             
         # Format HTML body with clean styling and active signature above quoted history
         formatted_content = draft_body.replace("\n", "<br>")
@@ -288,8 +309,9 @@ def send_followup_email(
         
         return {
             "success": True,
-            "message": "Follow-up email sent successfully via Outlook!",
+            "message": f"Follow-up email sent successfully to {cleaned_to}!",
             "entry_id": entry_id,
+            "to": cleaned_to,
             "subject": draft_subject or reply.Subject
         }
     except Exception as e:
@@ -304,11 +326,12 @@ def save_draft_in_outlook(
     entry_id: str,
     draft_body: str,
     draft_subject: Optional[str] = None,
+    to: Optional[str] = None,
     cc: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Create and save reply draft into Outlook's 'Drafts' folder.
-    User can review or send it later directly in Outlook.
+    Explicitly addresses client recipient (original_item.To).
     """
     pythoncom.CoInitialize()
     try:
@@ -318,10 +341,19 @@ def save_draft_in_outlook(
         
         reply = original_item.ReplyAll() if original_item.CC else original_item.Reply()
         
+        # Explicitly set To to client recipient
+        client_to = to.strip() if to and to.strip() else original_item.To
+        user_patterns = ["mirfan@ensaantech.com", "mirfan@squareonemea.com"]
+        cleaned_to = clean_recipient_list(client_to, user_patterns) or client_to
+        reply.To = cleaned_to
+        
+        if cc is not None and cc.strip():
+            reply.CC = clean_recipient_list(cc.strip(), user_patterns)
+        elif original_item.CC:
+            reply.CC = clean_recipient_list(original_item.CC, user_patterns)
+            
         if draft_subject:
             reply.Subject = draft_subject
-        if cc:
-            reply.CC = cc
             
         formatted_content = draft_body.replace("\n", "<br>")
         signature_html = get_active_signature_html(use_base64_img=True)
@@ -347,8 +379,9 @@ def save_draft_in_outlook(
         
         return {
             "success": True,
-            "message": "Draft created and saved to Outlook Drafts folder!",
-            "entry_id": entry_id
+            "message": f"Draft created for {cleaned_to} and saved to Outlook Drafts folder!",
+            "entry_id": entry_id,
+            "to": cleaned_to
         }
     except Exception as e:
         return {

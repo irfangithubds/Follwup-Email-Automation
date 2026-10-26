@@ -42,6 +42,7 @@ class SendEmailRequest(BaseModel):
     entry_id: str
     draft_body: str
     draft_subject: Optional[str] = None
+    to: Optional[str] = None
     cc: Optional[str] = None
 
 class StatusUpdateRequest(BaseModel):
@@ -137,6 +138,7 @@ def send_email(req: SendEmailRequest):
         entry_id=req.entry_id,
         draft_body=req.draft_body,
         draft_subject=req.draft_subject,
+        to=req.to,
         cc=req.cc
     )
     if not result.get("success"):
@@ -150,6 +152,7 @@ def save_draft(req: SendEmailRequest):
         entry_id=req.entry_id,
         draft_body=req.draft_body,
         draft_subject=req.draft_subject,
+        to=req.to,
         cc=req.cc
     )
     if not result.get("success"):
